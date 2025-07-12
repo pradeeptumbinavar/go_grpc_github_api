@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package user;
+
+option go_package = "go_grpc_github_api/pb";
+
+service UserService {
+  rpc GetUserProfile(GetUserRequest) returns (UserProfile) {}
+}
+
+message GetUserRequest {
+  string username = 1;
+}
+
+message UserProfile {
+  string login       = 1;
+  string name        = 2;
+  string email       = 3;
+  string bio         = 4;
+  int32  followers   = 5;
+  string avatar_url  = 6;
+  // …add fields as needed
+}
