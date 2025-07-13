@@ -9,6 +9,8 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -34,7 +36,11 @@ func NewServer(token string,url string) *server {
 func (s *server) GetUserProfile(ctx context.Context, req *pb.GetUserRequest) (*pb.UserProfile, error) {
   url := s.url + req.Username
   // Create HTTP request with authorization header
-  httpReq, _ := http.NewRequest("GET", url, nil)
+  httpReq, err := http.NewRequest("GET", url, nil)
+  if err != nil {
+	return nil, fmt.Errorf("failed to create HTTP request: %w", err)
+}
+
   httpReq.Header.Set("Authorization", "Bearer "+s.token)
   httpReq.Header.Set("Accept", "application/vnd.github.v3+json")
 
@@ -76,35 +82,49 @@ func (s *server) GetUserProfile(ctx context.Context, req *pb.GetUserRequest) (*p
 }
 
 func main() {
-  // Load environment variables from .env file
-  if err := godotenv.Load(".env"); err != nil {
-    log.Println("no .env file found—using environment variables")
-  }
+  // Load env vars
+	if err := godotenv.Load(".env"); err != nil {
+		log.Println("no .env file found—using environment variables")
+	}
 
-  token := os.Getenv("GITHUB_TOKEN")
-  if token == "" {
-    log.Fatalln("GITHUB_TOKEN is required (set it in .env or env)")
-  }
-  port := os.Getenv("GRPC_PORT")
-  if port == "" {
-    port = "50051"
-  }
+	token := os.Getenv("GITHUB_TOKEN")
+	if token == "" {
+		log.Fatalln("GITHUB_TOKEN is required (set it in .env or env)")
+	}
+	port := os.Getenv("GRPC_PORT")
+	if port == "" {
+		port = "50051"
+	}
 
-  githubAPI := os.Getenv("GITHUB_URL")
-  if port == "" {
-    log.Fatalln("GITHUB_URL is required (set it in .env or env)")
-  }
+	githubAPI := os.Getenv("GITHUB_URL")
+	if githubAPI == "" {
+		log.Fatalln("GITHUB_URL is required (set it in .env or env)")
+	}
 
-  // Create gRPC server
-  lis, err := net.Listen("tcp", ":50051")
-  if err != nil {
-    log.Fatalf("failed to listen: %v", err)
-  }
-  grpcServer := grpc.NewServer()
-  pb.RegisterUserServiceServer(grpcServer, NewServer(token,githubAPI))
+	// Listen on TCP
+	lis, err := net.Listen("tcp", ":"+port)
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
 
-  log.Println("gRPC server listening on :50051")
-  if err := grpcServer.Serve(lis); err != nil {
-    log.Fatalf("failed to serve: %v", err)
-  }
+	// Create gRPC server
+	grpcServer := grpc.NewServer()
+	pb.RegisterUserServiceServer(grpcServer, NewServer(token, githubAPI))
+
+	// Graceful shutdown setup
+	go func() {
+		log.Printf("gRPC server listening on :%s", port)
+		if err := grpcServer.Serve(lis); err != nil {
+			log.Fatalf("failed to serve: %v", err)
+		}
+	}()
+
+	// Wait for CTRL+C / SIGTERM
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)
+
+	<-stop
+	log.Println("Shutting down gRPC server...")
+	grpcServer.GracefulStop()
+	log.Println("Server stopped gracefully.")
 }

@@ -13,7 +13,7 @@ import (
 
 func main() {
   addr := flag.String("addr", "localhost:50051", "gRPC server address")
-  user := flag.String("user", "pradeeptumbinavar", "GitHub username")
+  user := flag.String("user", "elie222", "GitHub username")
   flag.Parse()
 
   conn, err := grpc.Dial(*addr, grpc.WithInsecure(), grpc.WithBlock())
@@ -31,6 +31,6 @@ func main() {
     log.Fatalf("could not get profile: %v", err)
   }
 
-  log.Printf("User: %s , Email: %s, Followers: %d",
-    resp.Name, resp.Email, resp.Followers)
+  log.Printf(" Name: %s, Followers: %d, Bio: %s,Login: %s,",
+    resp.Name,resp.Followers,resp.Bio,resp.Login)
 }
